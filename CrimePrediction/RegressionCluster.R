@@ -22,31 +22,35 @@ colnames(dfCrimeCount) <- c("Temperature", "CrimeCount")
 dfCrimeCount$Temperature <- as.numeric(as.character(dfCrimeCount$Temperature))
 str(dfCrimeCount)
 
-# Apply scatter plot
+# Get scatter plot to show the relation betweem Crime count and Temperature
 scatter.smooth(x = dfCrimeCount$Temperature, y = dfCrimeCount$CrimeCount, main = "Crime count ~ Temperature")
-dfCrimeCount
 
 # Get the correlation for linear dependence between the variables
 # The p-value of the test is 0.05291 Temperature and Crime events are correlated with a correlation coefficient of -0.22
 cor.test(dfCrimeCount$Temperature, dfCrimeCount$CrimeCount, method = "pearson")
 
 
-# Fit the polynomial regression model
+# Apply polynomial regression
 polyMod <- lm(dfCrimeCount$CrimeCount ~ dfCrimeCount$Temperature + I(dfCrimeCount$Temperature ^ 2) + I(dfCrimeCount$Temperature ^ 3))
 summary(polyMod)
 
+# Apply K-Means clustering to clsuter the data points (Lon & Lat) into 8 cluster
 set.seed(123)
 clusterCrime <- kmeans(dfCrimeFinal[, 5:6], 8)
+str(clusterCrime)
+
+# Add the cluster value to a separate column in the dataframe
 dfCrimeFinal$cluster <- as.factor(clusterCrime$cluster)
 
 # Add a separate column for Celcius value by converting the temperate in fahrenheit
 dfCrimeFinal$Celcius <- (dfCrimeFinal$Temperature - 32) * 5/9
 
 # Add Shiny Interactive App UI
-uiReg <- dashboardPage(
-    #  App title
+uiRC <- dashboardPage(
+    # App tile on the dashboard header
     dashboardHeader(title = "Los Angeles Crime Analysis", titleWidth = 280),
 
+    # Set the dashboard sidebar with the tabs and input controls
     dashboardSidebar(
         width = 280,
         sidebarMenu(
@@ -54,7 +58,6 @@ uiReg <- dashboardPage(
             menuItem("Clustering Point", tabName = "ClusterCircle", icon = icon("globe")),
             menuItem("Clustering Marker", tabName = "ClusterMarker", icon = icon("map-marker")),
             h4("Input controls"),
-            #box(title = "Input controls", status = "warning"),
             # Input: Slider for the Year range
             sliderInput(inputId = "year", label = "Year", min = 2010, max = 2018, value = c(2017, 2018)),
             # Input: Dropdown for the Crime Type
@@ -65,6 +68,7 @@ uiReg <- dashboardPage(
         )
     ),
 
+    # Set the dashboard body to display the output
     dashboardBody(
         tabItems(
             tabItem(tabName = "Regression",
@@ -77,7 +81,7 @@ uiReg <- dashboardPage(
             ),
             tabItem(tabName = "ClusterCircle",
                 fluidRow(
-                    # Area for clustering output
+                    # Area for cluster points output
                     box(width = NULL,
                         leafletOutput(outputId = "clustercircle", width = "1230", height = "645")
                     )
@@ -85,7 +89,7 @@ uiReg <- dashboardPage(
             ),
             tabItem(tabName = "ClusterMarker",
                 fluidRow(
-                    # Area for clustering output
+                    # Area for cluster area output
                     box(width = NULL,
                         leafletOutput(outputId = "clustermarker", width = "1230", height = "645")
                     )
@@ -96,7 +100,7 @@ uiReg <- dashboardPage(
 )
 
 # Add Shiny Interactive App Server for performing dynamic operations and plots
-serverReg <- function(input, output, session) {
+serverRC <- function(input, output, session) {
 
     output$regressionplot <- renderPlot({
 
@@ -128,11 +132,13 @@ serverReg <- function(input, output, session) {
         
     }, height = 600)
 
+    # Prepare the data for clustering plot
     data <- reactive({
         dfCrimeFinal %>%
             filter(Crime.Type == input$type & Year %in% input$year[1]:input$year[2] & Month %in% input$month)
     })
 
+    # Display the location of each crime event with the clustering applied by K-Means algorithm
     output$clustercircle <- renderLeaflet({
         df <- data()
 
@@ -145,6 +151,7 @@ serverReg <- function(input, output, session) {
 
     })
 
+    # Display the area of crime events in cluster with number of events in each area
     output$clustermarker <- renderLeaflet({
         df <- data()
 
@@ -156,4 +163,4 @@ serverReg <- function(input, output, session) {
 }
 
 # Start the shiny app
-shinyApp(ui = uiReg, server = serverReg)
+shinyApp(ui = uiRC, server = serverRC)

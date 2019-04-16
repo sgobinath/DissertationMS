@@ -1,19 +1,19 @@
+# Load the required libraries
 library(stringr)
-library(ggplot2)
 
 # Get the current working directory of the R process
 getwd()
 
-# Load the crime data
+# Load the raw data of crime from csv file to a data frame
 dfCrime <- read.csv("data/Crime_Data.csv", header = TRUE, na.strings = c("", "NA"), stringsAsFactors = FALSE)
 
-# Get the structure of the data frame postcode_data
+# Get the structure of the crime data frame
 str(dfCrime)
-# Show the first 10 rows of the dataframe containing all of the NIPostcode data.
-head(dfCrime)
-nrow(dfCrime)
 
-# Remove the unwanted columns
+# Display the first 5 rows of the dataframe
+head(dfCrime)
+
+# Remove the columns that are not required for this data analysis
 dfCrime$DR.Number <- NULL
 dfCrime$Date.Reported <- NULL
 dfCrime$Area.ID <- NULL
@@ -36,7 +36,7 @@ dfCrime$Premise.Description <- NULL
 dfCrime$Victim.Age <- NULL
 dfCrime$Victim.Sex <- NULL
 
-# Fix the Latitude and Longitude column format
+# Separate the Latitude and Longitude values in different columns
 lat <- str_split_fixed(dfCrime$Location, ", ", 2)[, 1]
 dfCrime$Latitude <- gsub("\\(", "", lat)
 
@@ -46,23 +46,24 @@ dfCrime$Longitude <- gsub("\\)", "", lon)
 dfCrime$Location <- NULL
 
 tail(dfCrime)
-unique(dfCrime$Crime.Code.Description)
 
+# Set the Crime Type column heading
+unique(dfCrime$Crime.Code.Description)
 colnames(dfCrime)[4] <- "Crime.Type"
 
-# Get the count of missing values
+# Get the count of missing values in the data frame
 sapply(dfCrime, function(x) sum(is.na(x)))
 
-# Write the clean crime data to a separate file in the working directory
+# Write the clean crime data to a separate file inside the working directory
 write.csv(dfCrime, file = "data/clean_crime_data.csv", quote = FALSE, na = "", row.names = FALSE)
 
-# Load the weather data
+# Load the raw data of weather
 dfWeather <- read.csv("data/Weather_Data.csv", header = TRUE, na.strings = c("", "NA"), stringsAsFactors = FALSE)
 
 # Get the structure of the data frame for weather data
 str(dfWeather)
 
-# Remove the unwanted columns
+# Remove the columns that are not required
 dfWeather$Site <- NULL
 dfWeather$Dewpoint <- NULL
 dfWeather$RH <- NULL
@@ -71,16 +72,17 @@ dfWeather$CldFrac <- NULL
 dfWeather$MSLP <- NULL
 dfWeather$Weather <- NULL
 dfWeather$Source <- NULL
+dfWeather$Windspeed <- NULL
+dfWeather$Precip <- NULL
 
-# Verify the missing values
+# Verify whether there are any missing values in the data frame
 sapply(dfWeather, function(x) sum(is.na(x)))
 
+# Display first 20 rows of weather data frame
 head(dfWeather, 20)
+
+# Fix the Date column format to have only date
 dfWeather$Date <- str_split_fixed(dfWeather$Date, " ", 2)[, 1]
-
-colnames(dfWeather)[5] <- "Precipitation"
-
-dfWeather$Precipitation[is.na(dfWeather$Precipitation)] <- 0
 
 # Remove the data for the years from 1998 to 2009
 for (year in 1998:2009) {
@@ -90,12 +92,13 @@ for (year in 1998:2009) {
 # Write the clean crime data to a separate file in the working directory
 write.csv(dfWeather, file = "data/clean_weather_data.csv", quote = FALSE, na = "", row.names = FALSE)
 
-# Fix the format of date values in the weather data for amalgamate the datasets
+# Create a new column DateHour with concatenation of date and hour values for amalgamating the data frames
 dfWeather$DateHour <- paste0(as.character(as.Date(dfWeather$Date, "%m/%d/%Y"), "%m/%d/%Y"), dfWeather$Hour)
 
-head(dfCrime, 20)
+head(dfWeather, 20)
 
-# Fix the format of hour values in the weather data for amalgamate the datasets
+# Now similar DateHour value is required in the crime dataframe
+# Get hour value in separate column from the Time Occured value which has hour and minute values in HHMM format
 getHour <- function(strHour) {
 
     lenHour <- nchar(strHour)
@@ -123,8 +126,7 @@ getHour <- function(strHour) {
 }
 dfCrime$Hour <- sapply(dfCrime$Time.Occurred, getHour)
 
-sapply(head(dfCrime$Time.Occurred), getHour)
-
+# Attach the date of crime occured after 11:30 PM to 00 hours of next day
 incDate <- function(x) {
     pval <- unlist(strsplit(x, "~"))
     strHr <- trimws(pval[1])
@@ -135,15 +137,15 @@ incDate <- function(x) {
     return(as.character(as.Date(strDt, "%m/%d/%Y") + 1, "%m/%d/%Y"))
 }
 dfCrime$Date.Occurred <- sapply(paste0(dfCrime$Hour, "~", dfCrime$DateOccur), incDate)
-
 dfCrime$Hour[dfCrime$Hour == "24"] <- "0"
 
 head(dfCrime)
 
+# Concatenate the date and hour values similar to weather dataframe for merging
 dfCrime$DateHour <- paste0(dfCrime$Date.Occurred, dfCrime$Hour)
 
+# Write the prepared crime and weather dataframe to separate files in the working directory
 write.csv(dfCrime, file = "data/crime_data2.csv", quote = FALSE, na = "", row.names = FALSE)
-
 write.csv(dfWeather, file = "data/weather_data2.csv", quote = FALSE, na = "", row.names = FALSE)
 
 # Amalgamate the datasets to create a new data frame
@@ -151,32 +153,17 @@ dfCrimeFinal <- merge(x = dfCrime, y = dfWeather, by = "DateHour", all.x = TRUE)
 
 head(dfCrimeFinal)
 
+# Fix the format of Crime Type and Area values
 dfCrimeFinal$Crime.Type <- gsub(",", " ", dfCrimeFinal$Crime.Type)
 dfCrimeFinal$Area.Name <- gsub(",", " ", dfCrimeFinal$Area.Name)
 
+# Remove the columns that are not necessary after amalgamation
 dfCrimeFinal$DateHour <- NULL
 dfCrimeFinal$Hour.x <- NULL
 dfCrimeFinal$Hour.y <- NULL
 dfCrimeFinal$Date <- NULL
-dfCrimeFinal$Windspeed <- NULL
-dfCrimeFinal$Precipitation <- NULL
 
-# Write the amalgamated final crime dataset to a separate file in the working directory
-write.csv(dfCrimeFinal, file = "data/final_crime_data.csv", quote = FALSE, na = "", row.names = FALSE)
-
-
-dfCrimeFinal <- read.csv("data/final_crime_data.csv", header = TRUE, na.strings = c("", "NA"), stringsAsFactors = FALSE)
-head(dfCrimeFinal)
-
-# Create a dataframe with crime temperature and crime count
-dfCrimeCount <- as.data.frame(table(dfCrimeFinal$Temperature))
-colnames(dfCrimeCount) <- c("Temperature", "CrimeCount")
-
-dfCrimeCount$Temperature <- as.numeric(as.character(dfCrimeCount$Temperature))
-str(dfCrimeCount)
-dfCrimeCount
-
-# Consolidate the crime types
+# Consolidate the crime type values
 dfCrimeFinal$Crime.Type[dfCrimeFinal$Crime.Type == "ASSAULT WITH DEADLY WEAPON  AGGRAVATED ASSAULT"] <- "ASSAULT WITH DEADLY WEAPON"
 dfCrimeFinal$Crime.Type[dfCrimeFinal$Crime.Type == "ASSAULT WITH DEADLY WEAPON ON POLICE OFFICER"] <- "ASSAULT WITH DEADLY WEAPON"
 
@@ -291,236 +278,13 @@ dfCrimeFinal$Crime.Type[dfCrimeFinal$Crime.Type == "THEFT OF IDENTITY"] <- "IDEN
 unique(dfCrimeFinal$Crime.Type)
 str(dfCrimeFinal)
 
-dfCrimeType <- as.data.frame(table(dfCrimeFinal$Crime.Type))
-colnames(dfCrimeType) <- c("CrimeType", "CrimeCount")
-dfCrimeType <- dfCrimeType[order(-dfCrimeType$CrimeCount),]
-dfCrimeType <- dfCrimeType[dfCrimeType$CrimeCount > 50000,]
-row.names(dfCrimeType) <- NULL
-dfCrimeType
-
-ggplot(data = dfCrimeType, aes(CrimeType, CrimeCount)) + geom_bar(stat = "identity", fill = "steelblue") +
-    geom_text(aes(label = CrimeCount), vjust = -0.3, size = 3.5) + theme_minimal()
-
-
-str(dfCrimeFinal)
-
 #Get abbreviated month name in separate month column
 dfCrimeFinal$Month <- month.abb[as.numeric(str_split_fixed(dfCrimeFinal$Date.Occurred, "/", 2)[, 1])]
 tail(dfCrimeFinal)
 
-
-tail(dfCrimeFinal)
-str_split_fixed(head(dfCrimeFinal$Date.Occurred), "/", 3)[,3]
-
 #Get Year value in separate month column
 dfCrimeFinal$Year <- as.numeric(str_split_fixed(dfCrimeFinal$Date.Occurred, "/", 3)[, 3])
 
-
-remove.packages("ggmap")
-install.packages("ggmap")
-library(ggmap)
-install_github("dkahle/ggmap")
-
-ggmap(get_googlemap())
-register_google(key = "")
-geocode("waco texas")
-map <- get_map(location = c(lon = mean(dfCrimeTheft$Longitude), lat = mean(dfCrimeTheft$Latitude)), zoom = 4)
-mapPoints <- ggmap(map) + geom_point(aes(x = Longitude, y = Latitude), data = dfCrimeFinal, alpha = .5)
-
-sessionInfo()
-
-dfCrimeTheft <- dfCrimeFinal[dfCrimeFinal$Crime.Type == "THEFT",]
-head(dfCrimeTheft)
-qmplot(Longitude, Latitude, data = dfCrimeTheft, colour = I('red'), size = I(3), darken = .3)
-
-install.packages("plotGoogleMaps")
-library("plotGoogleMaps")
-
-coords <- as.data.frame(cbind(lon = dfCrimeTheft$Longitude, lat = dfCrimeTheft$Latitude))
-
-# make it a spatial object by defining its coordinates in a reference system
-coordinates(coords) <- ~lon + lat
-
-# you also need a reference system, the following should be a fine default
-proj4string(coords) <- CRS("+init=epsg:4326")
-
-# then just plot
-mp <- plotGoogleMaps(coords, mapTypeId = 'ROADMAP')
-
-# Apply scatter plot
-scatter.smooth(x = dfCrimeCount$Temperature, y = dfCrimeCount$CrimeCount, col = 'navy', main = "Crime count ~ Temperature")
-dfCrimeCount
-
-# Get the correlation for linear dependence between the variables
-# The value -0.2 shows negative weak relationship
-cor(dfCrimeCount$Temperature, dfCrimeCount$CrimeCount)
-
-# Fit the polynomial regression model
-polyMod <- lm(dfCrimeCount$CrimeCount ~ dfCrimeCount$Temperature + I(dfCrimeCount$Temperature ^ 2) + I(dfCrimeCount$Temperature ^ 3))
-summary(polyMod)
-
-
-dt = data.frame(date = 1:10, value = c(10, 11, 15, 13, 16, 17, 18, 19, 16, 22))
-
-# plot everything in one graph
-ggplot(dfCrimeCount, aes(Temperature, CrimeCount)) + geom_point() +
-    stat_smooth(method = "lm", formula = y ~ poly(x, 2, raw = T), se = F, level = 0.95, col = "blue")
-
-
-
-dfCrimeJan <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "Jan",]$Temperature))
-colnames(dfCrimeJan) <- c("Temperature", "CrimeCount")
-dfCrimeJan$Temperature <- as.numeric(as.character(dfCrimeJan$Temperature))
-dfCrimeJan$Month <- "Jan"
-str(dfCrimeJan)
-
-dfCrimeFeb <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "Feb",]$Temperature))
-colnames(dfCrimeFeb) <- c("Temperature", "CrimeCount")
-dfCrimeFeb$Temperature <- as.numeric(as.character(dfCrimeFeb$Temperature))
-dfCrimeFeb$Month <- "Feb"
-
-dfCrimeMar <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "Mar",]$Temperature))
-colnames(dfCrimeMar) <- c("Temperature", "CrimeCount")
-dfCrimeMar$Temperature <- as.numeric(as.character(dfCrimeMar$Temperature))
-dfCrimeMar$Month <- "Mar"
-
-dfCrimeApr <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "Apr",]$Temperature))
-colnames(dfCrimeApr) <- c("Temperature", "CrimeCount")
-dfCrimeApr$Temperature <- as.numeric(as.character(dfCrimeApr$Temperature))
-dfCrimeApr$Month <- "Apr"
-
-dfCrimeMay <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "May",]$Temperature))
-colnames(dfCrimeMay) <- c("Temperature", "CrimeCount")
-dfCrimeMay$Temperature <- as.numeric(as.character(dfCrimeMay$Temperature))
-dfCrimeMay$Month <- "May"
-
-dfCrimeJun <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "Jun",]$Temperature))
-colnames(dfCrimeJun) <- c("Temperature", "CrimeCount")
-dfCrimeJun$Temperature <- as.numeric(as.character(dfCrimeJun$Temperature))
-dfCrimeJun$Month <- "Jun"
-
-dfCrimeJul <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "Jul",]$Temperature))
-colnames(dfCrimeJul) <- c("Temperature", "CrimeCount")
-dfCrimeJul$Temperature <- as.numeric(as.character(dfCrimeJul$Temperature))
-dfCrimeJul$Month <- "Jul"
-
-dfCrimeAug <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "Aug",]$Temperature))
-colnames(dfCrimeAug) <- c("Temperature", "CrimeCount")
-dfCrimeAug$Temperature <- as.numeric(as.character(dfCrimeAug$Temperature))
-dfCrimeAug$Month <- "Aug"
-
-dfCrimeSep <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "Sep",]$Temperature))
-colnames(dfCrimeSep) <- c("Temperature", "CrimeCount")
-dfCrimeSep$Temperature <- as.numeric(as.character(dfCrimeSep$Temperature))
-dfCrimeSep$Month <- "Sep"
-
-dfCrimeOct <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "Oct",]$Temperature))
-colnames(dfCrimeOct) <- c("Temperature", "CrimeCount")
-dfCrimeOct$Temperature <- as.numeric(as.character(dfCrimeOct$Temperature))
-dfCrimeOct$Month <- "Oct"
-
-dfCrimeNov <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "Nov",]$Temperature))
-colnames(dfCrimeNov) <- c("Temperature", "CrimeCount")
-dfCrimeNov$Temperature <- as.numeric(as.character(dfCrimeNov$Temperature))
-dfCrimeNov$Month <- "Nov"
-
-dfCrimeDec <- as.data.frame(table(dfCrimeFinal[dfCrimeFinal$Month == "Dec",]$Temperature))
-colnames(dfCrimeDec) <- c("Temperature", "CrimeCount")
-dfCrimeDec$Temperature <- as.numeric(as.character(dfCrimeDec$Temperature))
-dfCrimeDec$Month <- "Dec"
-
-dfCrimeMonth <- rbind(dfCrimeJan, dfCrimeFeb, dfCrimeMar, dfCrimeApr, dfCrimeMay, dfCrimeJun, dfCrimeJul, dfCrimeAug, dfCrimeSep, dfCrimeOct, dfCrimeNov, dfCrimeDec)
-
-head(dfCrimeMonth, 100)
-
-ggplot(dfCrimeMonth) + geom_line(aes(x = Temperature, y = CrimeCount, group = Month, colour = Month)) +
-    labs(title = "Number of crimes per month", subtitle = "(2010-2018)", x = "Temperature in Fahrenheit",
-    y = "Total Crimes", colour = "Gears") + theme_bw()
-
-dfCrimeMonth
-
-ggplot(dfCrimeMonth) + geom_line(aes(x = Month, y = Temperature))
-    scale_x_discrete(limits = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) + theme_bw()
-
-ggplot(dfCrimeMonth) + geom_line(aes(x = Month, y = CrimeCount))
-scale_x_continuous(limits = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) + theme_bw()
-
-ggplot(dfCrimeMonth, aes(x = CrimeCount, y = Month)) +
-    geom_density_ridges_gradient(aes(fill = ..x..), scale = 3, size = 0.3) +
-    scale_fill_gradientn(colours = c("#0D0887FF", "#CC4678FF", "#F0F921FF"), name = "Crime #") +
-    labs(title = 'Number of crimes by Month')
-
-install.packages("ggridges")
-library("ggridges")
-
-+ geom_line(aes(x = Month, y = CrimeCount)) +
-    labs(title = "Number of crimes per month", subtitle = "(2010-2018)", x = "Temperature in Fahrenheit",
-    y = "Total Crimes", colour = "Gears") + theme_bw()
-
-
-round(mean(dfCrimeDec$Temperature))
-round(mean(dfCrimeDec$CrimeCount))
-
-max(dfCrimeDec$Temperature)
-max(dfCrimeDec$CrimeCount)
-dfCrimeDec[dfCrimeDec$CrimeCount == max(dfCrimeDec$CrimeCount),]
-
-dfCrimeMax <- rbind(dfCrimeJan[dfCrimeJan$CrimeCount == max(dfCrimeJan$CrimeCount),],
-    dfCrimeFeb[dfCrimeFeb$CrimeCount == max(dfCrimeFeb$CrimeCount),],
-    dfCrimeMar[dfCrimeMar$CrimeCount == max(dfCrimeMar$CrimeCount),],
-    dfCrimeApr[dfCrimeApr$CrimeCount == max(dfCrimeApr$CrimeCount),],
-    dfCrimeMay[dfCrimeMay$CrimeCount == max(dfCrimeMay$CrimeCount),],
-    dfCrimeJun[dfCrimeJun$CrimeCount == max(dfCrimeJun$CrimeCount),],
-    dfCrimeJul[dfCrimeJul$CrimeCount == max(dfCrimeJul$CrimeCount),],
-    dfCrimeAug[dfCrimeAug$CrimeCount == max(dfCrimeAug$CrimeCount),],
-    dfCrimeSep[dfCrimeSep$CrimeCount == max(dfCrimeSep$CrimeCount),],
-    dfCrimeOct[dfCrimeOct$CrimeCount == max(dfCrimeOct$CrimeCount),],
-    dfCrimeNov[dfCrimeNov$CrimeCount == max(dfCrimeNov$CrimeCount),],
-    dfCrimeDec[dfCrimeDec$CrimeCount == max(dfCrimeDec$CrimeCount),])
-
-dfCrimeMin <- rbind(dfCrimeJan[dfCrimeJan$CrimeCount == min(dfCrimeJan$CrimeCount),],
-    dfCrimeFeb[dfCrimeFeb$CrimeCount == min(dfCrimeFeb$CrimeCount),],
-    dfCrimeMar[dfCrimeMar$CrimeCount == min(dfCrimeMar$CrimeCount),],
-    dfCrimeApr[dfCrimeApr$CrimeCount == min(dfCrimeApr$CrimeCount),],
-    dfCrimeMay[dfCrimeMay$CrimeCount == min(dfCrimeMay$CrimeCount),],
-    dfCrimeJun[dfCrimeJun$CrimeCount == min(dfCrimeJun$CrimeCount),],
-    dfCrimeJul[dfCrimeJul$CrimeCount == min(dfCrimeJul$CrimeCount),],
-    dfCrimeAug[dfCrimeAug$CrimeCount == min(dfCrimeAug$CrimeCount),],
-    dfCrimeSep[dfCrimeSep$CrimeCount == min(dfCrimeSep$CrimeCount),],
-    dfCrimeOct[dfCrimeOct$CrimeCount == min(dfCrimeOct$CrimeCount),],
-    dfCrimeNov[dfCrimeNov$CrimeCount == min(dfCrimeNov$CrimeCount),],
-    dfCrimeDec[dfCrimeDec$CrimeCount == min(dfCrimeDec$CrimeCount),])
-
-dfCrimeAvg <- rbind(dfCrimeMax, dfCrimeMin)
-
-ggplot(dfCrimeAvg, aes(x = Month)) +
-    geom_line(aes(y = Temperature, color = "Temperature")) + geom_line(aes(y = CrimeCount, color = "Total Crimes")) +
-    scale_y_continuous(sec.axis = sec_axis(~. * 0.02, name = "Temperature")) +
-    scale_colour_manual(values = c("blue", "red")) +
-    labs(y = "Total Crimes", x = "Month", colour = "Parameter") +
-    scale_x_discrete(limits = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
-    theme(legend.position = c(0.8, 0.9))
-
-
-dfCrimeRob <- dfCrimeFinal[dfCrimeFinal$Crime.Type == "ROBBERY",]
-nrow(dfCrimeRob)
-dfCrimeRob <- merge(aggregate(Crime.Type ~ Date.Occurred, dfCrimeRob, length), aggregate(Temperature ~ Date.Occurred, dfCrimeRob, mean))
-colnames(dfCrimeRob) <- c("Date", "CrimeCount", "Temperature")
-dfCrimeRob$Temperature <- round(dfCrimeRob$Temperature)
-dfCrimeRob$Date <- as.Date(dfCrimeRob$Date, "%m/%d/%Y")
-str(dfCrimeRob)
-
-ggplot(dfCrimeRob, aes(x = Date)) + geom_line(aes(y = Temperature)) + geom_line(aes(y = CrimeCount))
-
-dfCrimeRob$Month <- month.abb[as.numeric(as.character(dfCrimeRob$Date, "%m"))]
-
-ggplot(dfCrimeRob, aes(x = Date)) +
-    geom_line(aes(y = Temperature, color = "Temperature")) + geom_line(aes(y = CrimeCount, color = "Total Crimes"))
-
-    +
-    scale_colour_manual(values = c("blue", "red")) +
-    labs(y = "Total Crimes", x = "Date", colour = "Parameter") +
-    theme(legend.position = c(0.8, 0.9))
-
-tail(dfCrimeRob)
-
+# Write the amalgamated final crime dataset to a separate file in the working directory
+# This prepared dataset will be used for further analysis
+write.csv(dfCrimeFinal, file = "data/final_crime_data.csv", quote = FALSE, na = "", row.names = FALSE)
