@@ -35,10 +35,12 @@ cor.test(dfCrimeCount$Temperature, dfCrimeCount$CrimeCount, method = "pearson")
 polyMod <- lm(dfCrimeCount$CrimeCount ~ dfCrimeCount$Temperature + I(dfCrimeCount$Temperature ^ 2) + I(dfCrimeCount$Temperature ^ 3))
 summary(polyMod)
 
+set.seed(123)
+clusterCrime <- kmeans(dfCrimeFinal[, 5:6], 8)
+dfCrimeFinal$cluster <- as.factor(clusterCrime$cluster)
 
 # Add a separate column for Celcius value by converting the temperate in fahrenheit
 dfCrimeFinal$Celcius <- (dfCrimeFinal$Temperature - 32) * 5/9
-
 
 # Add Shiny Interactive App UI
 uiReg <- dashboardPage(
@@ -134,10 +136,12 @@ serverReg <- function(input, output, session) {
     output$clustercircle <- renderLeaflet({
         df <- data()
 
+        pal <- colorFactor(palette = 'Set1', domain = df$cluster)
+
         leaflet() %>% addTiles() %>% setView(-118.243683, 34.052235, zoom = 11) %>%
             addCircles(data = df, weight = 3, lat = ~Latitude, lng = ~Longitude,
                 popup = ~paste(df$Crime.Type, ' at ', df$Area.Name, ' on ', Date.Occurred),
-                color = '#7B1600', fillOpacity = 0.9)
+                color = ~pal(cluster), fillOpacity = 0.9)
 
     })
 

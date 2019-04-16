@@ -34,7 +34,6 @@ cor(dfCrimeCount$Temperature, dfCrimeCount$CrimeCount)
 polyMod <- lm(dfCrimeCount$CrimeCount ~ dfCrimeCount$Temperature + I(dfCrimeCount$Temperature ^ 2) + I(dfCrimeCount$Temperature ^ 3))
 summary(polyMod)
 
-
 # Add a separate column for Celcius value by converting the temperate in fahrenheit
 dfCrimeFinal$Celcius <- (dfCrimeFinal$Temperature - 32) * 5/9
 
