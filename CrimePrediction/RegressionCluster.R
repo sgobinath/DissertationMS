@@ -14,36 +14,76 @@ library(leaflet)
 dfCrimeFinal <- read.csv("data/final_crime_data.csv", header = TRUE, na.strings = c("", "NA"), stringsAsFactors = FALSE)
 str(dfCrimeFinal)
 
+# Add a separate column for Celsius value by converting the temperate in fahrenheit
+dfCrimeFinal$Celsius <- (dfCrimeFinal$Temperature - 32) * 5 / 9
 
-# Create a dataframe with crime temperature and crime count
-dfCrimeCount <- as.data.frame(table(dfCrimeFinal$Temperature))
+# Create a data frame with crime temperature and crime count
+dfCrimeCount <- as.data.frame(table(dfCrimeFinal$Celsius))
 colnames(dfCrimeCount) <- c("Temperature", "CrimeCount")
-
 dfCrimeCount$Temperature <- as.numeric(as.character(dfCrimeCount$Temperature))
 str(dfCrimeCount)
 
-# Get scatter plot to show the relation betweem Crime count and Temperature
-scatter.smooth(x = dfCrimeCount$Temperature, y = dfCrimeCount$CrimeCount, main = "Crime count ~ Temperature")
+# Get scatter plot to show the relation between Crime count and Temperature
+scatter.smooth(x = dfCrimeCount$Temperature, y = dfCrimeCount$CrimeCount, xlab = "Temperature in celcius", ylab = "Number of crime events",
+               main = " Temperature versus number of crimes", lpars = list(col = "blue", lwd = 3, lty = 3))
 
-# Get the correlation for linear dependence between the variables
-# The p-value of the test is 0.05291 Temperature and Crime events are correlated with a correlation coefficient of -0.22
+# Perform the correlation test for identifying linear relationship between temperature and Number of crimes
 cor.test(dfCrimeCount$Temperature, dfCrimeCount$CrimeCount, method = "pearson")
 
-
 # Apply polynomial regression
-polyMod <- lm(dfCrimeCount$CrimeCount ~ dfCrimeCount$Temperature + I(dfCrimeCount$Temperature ^ 2) + I(dfCrimeCount$Temperature ^ 3))
+polyMod <- lm(dfCrimeCount$CrimeCount ~ dfCrimeCount$Temperature + I(dfCrimeCount$Temperature ^ 2))
 summary(polyMod)
 
-# Apply K-Means clustering to clsuter the data points (Lon & Lat) into 8 cluster
+
+
+# Create a data frame for crime type burglary
+dfBurglary <- dfCrimeFinal[dfCrimeFinal$Crime.Type == "BURGLARY",]
+
+# Remove the columns that are not required for this analysis
+dfBurglary$Date.Occurred <- NULL
+dfBurglary$Time.Occurred <- NULL
+dfBurglary$Crime.Type <- NULL
+dfBurglary$Longitude <- NULL
+dfBurglary$Latitude <- NULL
+dfBurglary$Temperature <- NULL
+dfBurglary$Celsius <- NULL
+
+# Create Month Year column
+dfBurglary$MonthYear <- paste0(dfBurglary$Month, dfBurglary$Year)
+dfBurglary$Month <- NULL
+dfBurglary$Year <- NULL
+
+# Create data frame for the required areas
+dfCentral <- dfBurglary[dfBurglary$Area.Name == "Central",]
+dfPacific <- dfBurglary[dfBurglary$Area.Name == "Pacific",]
+
+# Consolidate the data frames to get the count for each month and year
+dfCentral <- as.data.frame(table(dfCentral$MonthYear))
+colnames(dfCentral) <- c("MonthYear", "Central")
+
+dfPacific <- as.data.frame(table(dfPacific$MonthYear))
+colnames(dfPacific) <- c("MonthYear2", "Pacific")
+
+# Concatenate the data frames
+dfBurglary <- cbind(dfCentral, dfPacific)
+dfBurglary$MonthYear2 <- NULL
+
+str(dfBurglary)
+head(dfBurglary)
+
+# Perform the t test to compare the mean of two paired crime count values
+t.test(dfBurglary$Pacific, dfBurglary$Central, alternative = "two.sided", var.equal = FALSE, paired = TRUE)
+
+
+# Apply K-Means clustering to clsuter the Longitude Latitude data points (areas) into 8 cluster
 set.seed(123)
 clusterCrime <- kmeans(dfCrimeFinal[, 5:6], 8)
 str(clusterCrime)
 
-# Add the cluster value to a separate column in the dataframe
+# Add the cluster value to a separate column in the data frame
 dfCrimeFinal$cluster <- as.factor(clusterCrime$cluster)
 
-# Add a separate column for Celcius value by converting the temperate in fahrenheit
-dfCrimeFinal$Celcius <- (dfCrimeFinal$Temperature - 32) * 5/9
+
 
 # Add Shiny Interactive App UI
 uiRC <- dashboardPage(
@@ -111,20 +151,20 @@ serverRC <- function(input, output, session) {
         }
         dfCrimeTmp <- dfCrimeTmp[dfCrimeTmp$Month %in% input$month,]
 
-        dfCrimePlot <- dfCrimeTmp %>% group_by(Celcius, Month) %>% summarize(count = n())
-        dfCrimePlot$Celcius <- as.numeric(as.character(dfCrimePlot$Celcius))
+        dfCrimePlot <- dfCrimeTmp %>% group_by(Celsius, Month) %>% summarize(count = n())
+        dfCrimePlot$Celsius <- as.numeric(as.character(dfCrimePlot$Celsius))
 
         # Frame the dynamic title for the plots
         st <- paste0(input$type, ' crimes that happened between ', input$year[1], ' and ', input$year[2], ' during the months ', paste(input$month, sep = '', collapse = ','))
 
-        # Render the plot with Number of Crimes in the X axis and Temperature in Celcius in the y axis
-        p1 <- ggplot(dfCrimePlot) + geom_line(aes(x = count, y = Celcius, group = Month, colour = Month)) +
+        # Render the plot with Number of Crimes in the X axis and Temperature in Celsius in the y axis
+        p1 <- ggplot(dfCrimePlot) + geom_line(aes(x = count, y = Celsius, group = Month, colour = Month)) +
             labs(title = "Crimes by month (Crime vs Temperature)", subtitle = st, x = "Number of Crimes",
-            y = "Temperature in Celcius", colour = "Month") + theme_bw()
+            y = "Temperature in Celsius", colour = "Month") + theme_bw()
 
-        # Render the plot with Temperature in Celcius in the X axis and Number of Crimes in the y axis
-        p2 <- ggplot(dfCrimePlot) + geom_line(aes(x = Celcius, y = count, group = Month, colour = Month)) +
-            labs(title = "Crimes by month (Temperature vs Crime)", subtitle = st, x = "Temperature in Celcius",
+        # Render the plot with Temperature in Celsius in the X axis and Number of Crimes in the y axis
+        p2 <- ggplot(dfCrimePlot) + geom_line(aes(x = Celsius, y = count, group = Month, colour = Month)) +
+            labs(title = "Crimes by month (Temperature vs Crime)", subtitle = st, x = "Temperature in Celsius",
             y = "Number of Crimes", colour = "Month") + theme_bw()
 
 

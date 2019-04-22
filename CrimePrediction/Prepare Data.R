@@ -278,12 +278,34 @@ dfCrimeFinal$Crime.Type[dfCrimeFinal$Crime.Type == "THEFT OF IDENTITY"] <- "IDEN
 unique(dfCrimeFinal$Crime.Type)
 str(dfCrimeFinal)
 
-#Get abbreviated month name in separate month column
+# Get abbreviated month name in separate month column
 dfCrimeFinal$Month <- month.abb[as.numeric(str_split_fixed(dfCrimeFinal$Date.Occurred, "/", 2)[, 1])]
 tail(dfCrimeFinal)
 
-#Get Year value in separate month column
+# Get Year value in separate month column
 dfCrimeFinal$Year <- as.numeric(str_split_fixed(dfCrimeFinal$Date.Occurred, "/", 3)[, 3])
+
+# Get top 10 crimes and plot them in bar chart
+dfCrimeType <- as.data.frame(table(dfCrimeFinal$Crime.Type))
+colnames(dfCrimeType) <- c("CrimeType", "CrimeCount")
+dfCrimeType <- dfCrimeType[order(-dfCrimeType$CrimeCount),]
+dfCrimeType <- dfCrimeType[dfCrimeType$CrimeCount > 50000,]
+row.names(dfCrimeType) <- NULL
+dfCrimeType
+
+ggplot(data = dfCrimeType, aes(CrimeType, CrimeCount)) + geom_bar(stat = "identity", fill = "steelblue") +
+    geom_text(aes(label = CrimeCount), vjust = -0.3, size = 3.5) + theme_minimal()
+
+# Get the relationshio between robbery and temperature and plot them
+dfCrimeRob <- dfCrimeFinal[dfCrimeFinal$Crime.Type == "ROBBERY",]
+dfCrimeRob <- merge(aggregate(Crime.Type ~ Date.Occurred, dfCrimeRob, length), aggregate(Temperature ~ Date.Occurred, dfCrimeRob, mean))
+colnames(dfCrimeRob) <- c("Date", "CrimeCount", "Temperature")
+dfCrimeRob$Temperature <- round(dfCrimeRob$Temperature)
+dfCrimeRob$Date <- as.Date(dfCrimeRob$Date, "%m/%d/%Y")
+
+ggplot(dfCrimeRob, aes(x = Date)) + geom_line(aes(y = Temperature, color = "Temperature")) +
+    geom_line(aes(y = CrimeCount, color = "Total Crimes"))
+
 
 # Write the amalgamated final crime dataset to a separate file in the working directory
 # This prepared dataset will be used for further analysis
