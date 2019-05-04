@@ -141,9 +141,10 @@ serverRC <- function(input, output, session) {
         # Add the color palette
         pal <- colorFactor(palette = clr, domain = df$cluster)
 
-        # Add the circles for each observations
+        # Initialize the leaflet map
         crimeMap <- leaflet() %>% addTiles() %>% setView(-118.243683, 34.052235, zoom = 10)
-        
+
+        # Caculate the threshold value
         csize <- numeric()
         for (group in levels(df$cluster)) {
             dfOutline <- df[df$cluster == group,]
@@ -157,7 +158,7 @@ serverRC <- function(input, output, session) {
             cobs <- sort(csize)[cout]
         }
 
-        # Add the ploygon for each cluster
+        # Add the circle points and overlay polygon for each cluster above threshold
         for (group in levels(df$cluster)) {
             dfCluster <- df[df$cluster == group,]
             if (nrow(dfCluster) > cobs) {
