@@ -9,79 +9,32 @@ library("dplyr")
 library(ggplot2)
 library(gridExtra)
 library(leaflet)
+library(RColorBrewer)
+
 
 # Load the crime data which is cleaned and amalgamated
 dfCrimeFinal <- read.csv("data/final_crime_data.csv", header = TRUE, na.strings = c("", "NA"), stringsAsFactors = FALSE)
 str(dfCrimeFinal)
 
-# Add a separate column for Celsius value by converting the temperate in fahrenheit
-dfCrimeFinal$Celsius <- (dfCrimeFinal$Temperature - 32) * 5 / 9
+dfCrimeFinal$Temperature <- NULL
+dfCrimeFinal$Time.Occurred <- NULL
 
-# Create a data frame with crime temperature and crime count
-dfCrimeCount <- as.data.frame(table(dfCrimeFinal$Celsius))
-colnames(dfCrimeCount) <- c("Temperature", "CrimeCount")
-dfCrimeCount$Temperature <- as.numeric(as.character(dfCrimeCount$Temperature))
-str(dfCrimeCount)
+# Prepare data frame for Regression plots
+dfReg <- dfCrimeFinal[!is.na(dfCrimeFinal$Celsius),]
+dfReg$Date.Occurred <- NULL
+dfReg$Area.Name <- NULL
+dfReg$Longitude <- NULL
+dfReg$Latitude <- NULL
+str(dfReg)
 
-# Get scatter plot to show the relation between Crime count and Temperature
-scatter.smooth(x = dfCrimeCount$Temperature, y = dfCrimeCount$CrimeCount, xlab = "Temperature in celcius", ylab = "Number of crime events",
-               main = " Temperature versus number of crimes", lpars = list(col = "blue", lwd = 3, lty = 3))
+# Prepare data frame for Cluster plots
+dfMap <- dfCrimeFinal[dfCrimeFinal$Longitude != 0 & dfCrimeFinal$Latitude != 0,]
+dfMap$Celsius <- NULL
+str(dfMap)
 
-# Perform the correlation test for identifying linear relationship between temperature and Number of crimes
-cor.test(dfCrimeCount$Temperature, dfCrimeCount$CrimeCount, method = "pearson")
-
-# Apply polynomial regression
-polyMod <- lm(dfCrimeCount$CrimeCount ~ dfCrimeCount$Temperature + I(dfCrimeCount$Temperature ^ 2))
-summary(polyMod)
-
-
-
-# Create a data frame for crime type burglary
-dfBurglary <- dfCrimeFinal[dfCrimeFinal$Crime.Type == "BURGLARY",]
-
-# Remove the columns that are not required for this analysis
-dfBurglary$Date.Occurred <- NULL
-dfBurglary$Time.Occurred <- NULL
-dfBurglary$Crime.Type <- NULL
-dfBurglary$Longitude <- NULL
-dfBurglary$Latitude <- NULL
-dfBurglary$Temperature <- NULL
-dfBurglary$Celsius <- NULL
-
-# Create Month Year column
-dfBurglary$MonthYear <- paste0(dfBurglary$Month, dfBurglary$Year)
-dfBurglary$Month <- NULL
-dfBurglary$Year <- NULL
-
-# Create data frame for the required areas
-dfCentral <- dfBurglary[dfBurglary$Area.Name == "Central",]
-dfPacific <- dfBurglary[dfBurglary$Area.Name == "Pacific",]
-
-# Consolidate the data frames to get the count for each month and year
-dfCentral <- as.data.frame(table(dfCentral$MonthYear))
-colnames(dfCentral) <- c("MonthYear", "Central")
-
-dfPacific <- as.data.frame(table(dfPacific$MonthYear))
-colnames(dfPacific) <- c("MonthYear2", "Pacific")
-
-# Concatenate the data frames
-dfBurglary <- cbind(dfCentral, dfPacific)
-dfBurglary$MonthYear2 <- NULL
-
-str(dfBurglary)
-head(dfBurglary)
-
-# Perform the t test to compare the mean of two paired crime count values
-t.test(dfBurglary$Pacific, dfBurglary$Central, alternative = "two.sided", var.equal = FALSE, paired = TRUE)
-
-
-# Apply K-Means clustering to clsuter the Longitude Latitude data points (areas) into 8 cluster
-set.seed(123)
-clusterCrime <- kmeans(dfCrimeFinal[, 5:6], 8)
-str(clusterCrime)
-
-# Add the cluster value to a separate column in the data frame
-dfCrimeFinal$cluster <- as.factor(clusterCrime$cluster)
+# Get the colour palette Set1 and add more colors upto 20 for cluster colours
+clr = brewer.pal(4, "Set1")
+clr = colorRampPalette(clr)(30)
 
 
 
@@ -124,6 +77,10 @@ uiRC <- dashboardPage(
                     # Area for cluster points output
                     box(width = NULL,
                         leafletOutput(outputId = "clustercircle", width = "1230", height = "645")
+                    ),
+                    absolutePanel(top = 90, right = 10,
+                        sliderInput(inputId = "cluster", label = "Clusters", min = 1, max = 30, value = 10),
+                        sliderInput(inputId = "threshold", label = "Threshold %", min = 1, max = 100, value = 10)
                     )
                 )
             ),
@@ -145,28 +102,24 @@ serverRC <- function(input, output, session) {
     output$regressionplot <- renderPlot({
 
         # Filter the data frame based on the input selected
-        dfCrimeTmp <- dfCrimeFinal[dfCrimeFinal$Year %in% input$year[1]:input$year[2],]
+        dfCrimeTmp <- dfReg[dfReg$Year %in% input$year[1]:input$year[2],]
         if (input$type != "ALL") {
             dfCrimeTmp <- dfCrimeTmp[dfCrimeTmp$Crime.Type == input$type,]
         }
         dfCrimeTmp <- dfCrimeTmp[dfCrimeTmp$Month %in% input$month,]
 
-        dfCrimePlot <- dfCrimeTmp %>% group_by(Celsius, Month) %>% summarize(count = n())
-        dfCrimePlot$Celsius <- as.numeric(as.character(dfCrimePlot$Celsius))
-
+        dfCrimeTmp <- dfCrimeTmp %>% group_by(Celsius, Month) %>% summarize(count = n())
+        
         # Frame the dynamic title for the plots
         st <- paste0(input$type, ' crimes that happened between ', input$year[1], ' and ', input$year[2], ' during the months ', paste(input$month, sep = '', collapse = ','))
 
-        # Render the plot with Number of Crimes in the X axis and Temperature in Celsius in the y axis
-        p1 <- ggplot(dfCrimePlot) + geom_line(aes(x = count, y = Celsius, group = Month, colour = Month)) +
-            labs(title = "Crimes by month (Crime vs Temperature)", subtitle = st, x = "Number of Crimes",
-            y = "Temperature in Celsius", colour = "Month") + theme_bw()
-
         # Render the plot with Temperature in Celsius in the X axis and Number of Crimes in the y axis
-        p2 <- ggplot(dfCrimePlot) + geom_line(aes(x = Celsius, y = count, group = Month, colour = Month)) +
+        p2 <- ggplot(dfCrimeTmp) + geom_line(aes(x = Celsius, y = count, group = Month, colour = Month)) +
             labs(title = "Crimes by month (Temperature vs Crime)", subtitle = st, x = "Temperature in Celsius",
             y = "Number of Crimes", colour = "Month") + theme_bw()
 
+        # Add the inverse of above map
+        p1 <- p2 + coord_flip()
 
         grid.arrange(p1, p2, ncol = 1)
         
@@ -174,28 +127,58 @@ serverRC <- function(input, output, session) {
 
     # Prepare the data for clustering plot
     data <- reactive({
-        dfCrimeFinal %>%
-            filter(Crime.Type == input$type & Year %in% input$year[1]:input$year[2] & Month %in% input$month)
+        dfMap %>% filter(Crime.Type == input$type & Year %in% input$year[1]:input$year[2] & Month %in% input$month)
     })
 
     # Display the location of each crime event with the clustering applied by K-Means algorithm
     output$clustercircle <- renderLeaflet({
         df <- data()
+        # Apply K-Means clustering for the Longitude Latitude data points (areas)
+        clusterCrime <- kmeans(df[, 4:5], input$cluster)
+        # Add the cluster value in a separate column of data frame
+        df$cluster <- as.factor(clusterCrime$cluster)
 
-        pal <- colorFactor(palette = 'Set1', domain = df$cluster)
+        # Add the color palette
+        pal <- colorFactor(palette = clr, domain = df$cluster)
 
-        leaflet() %>% addTiles() %>% setView(-118.243683, 34.052235, zoom = 11) %>%
-            addCircles(data = df, weight = 3, lat = ~Latitude, lng = ~Longitude,
-                popup = ~paste(df$Crime.Type, ' at ', df$Area.Name, ' on ', Date.Occurred),
-                color = ~pal(cluster), fillOpacity = 0.9)
+        # Add the circles for each observations
+        crimeMap <- leaflet() %>% addTiles() %>% setView(-118.243683, 34.052235, zoom = 10)
+        
+        csize <- numeric()
+        for (group in levels(df$cluster)) {
+            dfOutline <- df[df$cluster == group,]
+            csize <- c(csize, nrow(dfOutline))
+        }
+        clevel <- as.integer(100 / input$cluster)
+        cout <- as.integer(input$threshold / clevel)
+        if (cout == 0) {
+            cobs = 0
+        } else {
+            cobs <- sort(csize)[cout]
+        }
 
+        # Add the ploygon for each cluster
+        for (group in levels(df$cluster)) {
+            dfCluster <- df[df$cluster == group,]
+            if (nrow(dfCluster) > cobs) {
+                dfOutline <- dfCluster[chull(dfCluster$Longitude, dfCluster$Latitude),]
+
+                crimeMap = addPolygons(crimeMap, data = dfOutline, lng = ~Longitude, lat = ~Latitude, fill = F,
+                        weight = 2, color = ~pal(dfOutline$cluster), options = pathOptions(clickable = FALSE)) %>%
+                        addCircles(data = dfCluster, weight = 3, lat = ~Latitude, lng = ~Longitude,
+                        popup = ~paste(df$Crime.Type, ' at ', df$Area.Name, ' on ', Date.Occurred),
+                        color = ~pal(cluster), fillOpacity = 0.9)
+            }
+        }
+
+        crimeMap
     })
 
     # Display the area of crime events in cluster with number of events in each area
     output$clustermarker <- renderLeaflet({
         df <- data()
 
-        leaflet() %>% addTiles() %>% setView(-118.243683, 34.052235, zoom = 11) %>%
+        leaflet() %>% addTiles() %>% setView(-118.243683, 34.052235, zoom = 10) %>%
             addMarkers(data = df, lat = ~Latitude, lng = ~Longitude, clusterOptions = markerClusterOptions())
 
     })
@@ -204,3 +187,5 @@ serverRC <- function(input, output, session) {
 
 # Start the shiny app
 shinyApp(ui = uiRC, server = serverRC)
+
+        
