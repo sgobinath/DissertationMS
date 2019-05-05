@@ -16,6 +16,9 @@ library(RColorBrewer)
 dfCrimeFinal <- read.csv("data/final_crime_data.csv", header = TRUE, na.strings = c("", "NA"), stringsAsFactors = FALSE)
 str(dfCrimeFinal)
 
+clusterCrime <- kmeans(dfCrimeFinal[, 4:5], 8)
+as.data.frame(clusterCrime$centers)
+
 dfCrimeFinal$Temperature <- NULL
 dfCrimeFinal$Time.Occurred <- NULL
 
@@ -135,6 +138,8 @@ serverRC <- function(input, output, session) {
         df <- data()
         # Apply K-Means clustering for the Longitude Latitude data points (areas)
         clusterCrime <- kmeans(df[, 4:5], input$cluster)
+        dfCentroid <- as.data.frame(clusterCrime$centers)
+
         # Add the cluster value in a separate column of data frame
         df$cluster <- as.factor(clusterCrime$cluster)
 
@@ -159,18 +164,24 @@ serverRC <- function(input, output, session) {
         }
 
         # Add the circle points and overlay polygon for each cluster above threshold
+        pgroup <- numeric()
         for (group in levels(df$cluster)) {
             dfCluster <- df[df$cluster == group,]
             if (nrow(dfCluster) > cobs) {
+                pgroup <- c(pgroup, as.numeric(group))
                 dfOutline <- dfCluster[chull(dfCluster$Longitude, dfCluster$Latitude),]
 
                 crimeMap = addPolygons(crimeMap, data = dfOutline, lng = ~Longitude, lat = ~Latitude, fill = F,
                         weight = 2, color = ~pal(dfOutline$cluster), options = pathOptions(clickable = FALSE)) %>%
-                        addCircles(data = dfCluster, weight = 3, lat = ~Latitude, lng = ~Longitude,
+                    addCircles(data = dfCluster, weight = 3, lat = ~Latitude, lng = ~Longitude,
                         popup = ~paste(df$Crime.Type, ' at ', df$Area.Name, ' on ', Date.Occurred),
                         color = ~pal(cluster), fillOpacity = 0.9)
+                
             }
         }
+        dfCentroid <- dfCentroid[pgroup,]
+        crimeMap = addCircles(crimeMap, data = dfCentroid, weight = 5,
+                lat = ~Latitude, lng = ~Longitude, color = 'black')
 
         crimeMap
     })
@@ -188,5 +199,3 @@ serverRC <- function(input, output, session) {
 
 # Start the shiny app
 shinyApp(ui = uiRC, server = serverRC)
-
-        

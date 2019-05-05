@@ -3,20 +3,26 @@ library(gridExtra)
 
 # Load the crime data which is cleaned and amalgamated
 dfCrimeFinal <- read.csv("data/final_crime_data.csv", header = TRUE, na.strings = c("", "NA"), stringsAsFactors = FALSE)
+str(dfCrimeFinal)
+
+colSums(is.na(dfCrimeFinal))
 
 # Get top 10 crimes and plot them in bar chart
 dfCrimeType <- as.data.frame(table(dfCrimeFinal$Crime.Type))
 colnames(dfCrimeType) <- c("CrimeType", "CrimeCount")
+dfCrimeType$CrimeCount <- as.numeric(as.character(dfCrimeType$CrimeCount))
 dfCrimeType <- dfCrimeType[order(-dfCrimeType$CrimeCount),]
 dfCrimeType <- dfCrimeType[dfCrimeType$CrimeCount > 50000,]
 row.names(dfCrimeType) <- NULL
-dfCrimeType
+head(dfCrimeType)
+dfCrimeType$CrimeType <- factor(dfCrimeType$CrimeType, levels = dfCrimeType$CrimeType)
 
 ggplot(data = dfCrimeType, aes(CrimeType, CrimeCount)) + geom_bar(stat = "identity", fill = "steelblue") +
-    geom_text(aes(label = CrimeCount), vjust = -0.3, size = 3.5) + theme_minimal()
+    geom_text(aes(label = CrimeCount), vjust = -0.5, size = 3) + scale_y_continuous(labels = scales::comma) +
+    theme(axis.text.x = element_text(angle = 30, hjust = 1))
 
 
-# Get the relationshio between robbery and temperature and plot them
+# Get the relationship between robbery and temperature and plot them
 dfCrimeRob <- dfCrimeFinal[dfCrimeFinal$Crime.Type == "ROBBERY",]
 dfCrimeRob <- merge(aggregate(Crime.Type ~ Date.Occurred, dfCrimeRob, length), aggregate(Temperature ~ Date.Occurred, dfCrimeRob, mean))
 colnames(dfCrimeRob) <- c("Date", "CrimeCount", "Temperature")
@@ -36,32 +42,6 @@ str(dfCrimeCount)
 # Get scatter plot to show the relation between Crime count and Temperature
 scatter.smooth(x = dfCrimeCount$Temperature, y = dfCrimeCount$CrimeCount, xlab = "Temperature in celcius", ylab = "Number of crimes",
                main = " Temperature versus number of crimes", lpars = list(col = "blue", lwd = 3, lty = 3))
-
-
-# Create a data frame with hour of crime occured and number of crimes to plot them
-dfCrimeTime <- as.data.frame(table(dfCrimeFinal$Time.Occurred))
-colnames(dfCrimeTime) <- c("Time", "CrimeCount")
-dfCrimeTime$Time <- as.numeric(as.character(dfCrimeTime$Time))
-
-getTimeHour <- function(strHour) {
-
-    lenHour <- nchar(strHour)
-
-    switch(nchar(strHour), {
-        return(0)
-    }, {
-        return(0)
-    }, {
-        return(as.numeric(substr(as.character(strHour), 1, 1)))
-    }, {
-        return(as.numeric(substr(as.character(strHour), 1, 2)))
-    })
-
-    return(NA)
-}
-dfCrimeTime$Hour <- sapply(dfCrimeTime$Time, getTimeHour)
-
-ggplot(dfCrimeTime) + geom_line(aes(x = Hour, y = CrimeCount)) + labs(title = "Crime vs Time", x = "Number of Crimes", y = "Hour")
 
 
 # Create data frames for each of the top 10 crimes and plot them in an single page
@@ -126,6 +106,32 @@ dfThreat$Temperature <- round(as.numeric(as.character(dfThreat$Temperature)), 1)
 pThreat <- ggplot(dfThreat, aes(Temperature, Crime)) + geom_point(color = "#9DE0D0") + ggtitle("Criminal Threats")
 
 grid.arrange(pTheft, pBurglary, pBattery, pVandalism, pVehicle, pIdentity, pIntimate, pRobbery, pAssault, pThreat, ncol = 4)
+
+
+# Create a data frame with hour of crime occured and number of crimes to plot them
+dfCrimeTime <- as.data.frame(table(dfCrimeFinal$Time.Occurred))
+colnames(dfCrimeTime) <- c("Time", "CrimeCount")
+dfCrimeTime$Time <- as.numeric(as.character(dfCrimeTime$Time))
+
+getTimeHour <- function(strHour) {
+
+    lenHour <- nchar(strHour)
+
+    switch(nchar(strHour), {
+        return(0)
+    }, {
+        return(0)
+    }, {
+        return(as.numeric(substr(as.character(strHour), 1, 1)))
+    }, {
+        return(as.numeric(substr(as.character(strHour), 1, 2)))
+    })
+
+    return(NA)
+}
+dfCrimeTime$Hour <- sapply(dfCrimeTime$Time, getTimeHour)
+
+ggplot(dfCrimeTime) + geom_line(aes(x = Hour, y = CrimeCount)) + labs(title = "Crime vs Time", x = "Number of Crimes", y = "Hour")
 
 
 # Perform the correlation test for identifying linear relationship between temperature and Number of crimes
